@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Health Assistant</title>
+    <!-- 1. Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 2. Load FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    
+    <!-- 3. Load Agora Web SDK -->
+    <script src="https://download.agora.io/sdk/release/AgoraRTC_N.js"></script>
+
+    <style>
+        /* Base font */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Custom styles for the app */
+        .app-screen {
+            display: none; /* All screens hidden by default */
+        }
+        .app-page {
+            display: none; /* All pages hidden by default */
+        }
+        /* Custom animation for pulsing microphone */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.05); }
+        }
+        .is-listening {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+    </style>
+</head>
+<body class="bg-white">
+
+    <div id="app-container" class="max-w-md mx-auto h-screen overflow-hidden border border-gray-200 shadow-lg">
+
+        <!-- ===================================================================== -->
+        <!-- SCREEN 1: LOGIN                                                       -->
+        <!-- ===================================================================== -->
+        <div id="screen-login" class="app-screen p-8 flex flex-col h-full justify-center">
+            <div class="flex flex-col items-center justify-center text-center">
+                <h1 class="text-4xl font-bold mb-3">Welcome</h1>
+                <p class="text-gray-600 text-lg mb-10">Please login to continue</p>
+            </div>
+            
+            <div class="space-y-6">
+                <div>
+                    <label for="username" class="block text-sm font-medium text-gray-700">Username</label>
+                    <input type="text" id="username" placeholder="Enter your username" class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-black">
+                </div>
+                <div>
+                    <label for="phone" class="block text-sm font-medium text-gray-700">10-Digit Phone Number *</label>
+                    <input type="tel" id="phone" placeholder="Enter 10-digit phone number" class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-black">
+                </div>
+                <button onclick="showScreen('screen-location')" class="w-full bg-black text-white font-bold py-4 px-6 rounded-full text-lg shadow-lg hover:bg-gray-800 transition-colors">
+                    Get OTP
+                </button>
+            </div>
+        </div>
+        <!-- ===================================================================== -->
+        <!-- SCREEN 2: ENABLE LOCATION                                             -->
+        <!-- ===================================================================== -->
+        <div id="screen-location" class="app-screen p-8 flex flex-col h-full items-center justify-center text-center relative">
+            <i class="fa-solid fa-map-marker-alt w-16 h-16 text-black mb-8 text-6xl"></i>
+            <h1 class="text-4xl font-bold mb-4">Enable Location</h1>
+            <p class="text-gray-600 text-lg mb-16 px-4">We need your location to provide better healthcare services and find nearby medical facilities.</p>
+            
+            <div class="w-full space-y-4">
+                <button onclick="requestLocationPermission()" class="w-full bg-black text-white font-bold py-4 px-6 rounded-full text-lg shadow-lg hover:bg-gray-800 transition-colors">
+                    Turn On Location
+                </button>
+                <button onclick="goToMainApp()" class="w-full bg-gray-100 text-black font-bold py-4 px-6 rounded-full text-lg hover:bg-gray-200 transition-colors">
+                    Skip for now
+                </button>
+            </div>
+
+            <button onclick="console.log('Emergency Call Initiated!')" class="absolute bottom-8 right-8 w-20 h-20 bg-red-600 text-white rounded-full flex items-center justify-center shadow-2xl z-20 transition-transform hover:scale-105">
+                <i class="fa-solid fa-phone w-8 h-8 text-4xl"></i>
+            </button>
+        </div>
+
+        <!-- ===================================================================== -->
+        <!-- SCREEN 3: MAIN APP                                                    -->
+        <!-- ===================================================================== -->
+        <div id="screen-main" class="app-screen h-full relative flex flex-col">
+            
+            <!-- Sidebar (Hidden by default) -->
+            <div id="sidebar-backdrop" onclick="toggleSidebar()" class="fixed inset-0 bg-black/50 z-20 hidden"></div>
+            <div id="sidebar" class="fixed inset-y-0 left-0 w-80 bg-white z-30 shadow-lg p-6 transform -translate-x-full transition-transform duration-300 ease-in-out">
+                <div class="flex items-center mb-8">
+                    <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mr-4">
+                        <i class="fa-solid fa-bars w-8 h-8 text-black text-3xl"></i>
+                    </div>
+                    <h2 class="text-2xl font-bold">Navigation Bar</h2>
+                </div>
+                <nav class="space-y-2">
+                    <a href="#" onclick="showPage('page-home')" class="flex items-center p-3 rounded-lg hover:bg-gray-100">
+                        <i class="fa-solid fa-home w-6 h-6 mr-4 text-gray-700 text-xl"></i>
+                        <span class="text-lg font-medium">The Home</span>
+                    </a>
+                    <a href="#" onclick="showPage('page-profile')" class="flex items-center p-3 rounded-lg hover:bg-gray-100">
+                        <i class="fa-solid fa-user w-6 h-6 mr-4 text-gray-700 text-xl"></i>
+                        <span class="text-lg font-medium">Profile</span>
+                    </a>
+                    <a href="#" onclick="showPage('page-medications')" class="flex items-center p-3 rounded-lg hover:bg-gray-100">
+                        <i class="fa-solid fa-pills w-6 h-6 mr-4 text-gray-700 text-xl"></i>
+                        <span class="text-lg font-medium">Medications</span>
+                    </a>
+                    <a href="#" onclick="showPage('page-records')" class="flex items-center p-3 rounded-lg hover:bg-gray-100">
+                        <i class="fa-solid fa-file-lines w-6 h-6 mr-4 text-gray-700 text-xl"></i>
+                        <span class="text-lg font-medium">Medical Records</span>
+                    </a>
+                    <a href="#" onclick="showPage('page-calendar')" class="flex items-center p-3 rounded-lg hover:bg-gray-100">
+                        <i class="fa-solid fa-calendar-days w-6 h-6 mr-4 text-gray-700 text-xl"></i>
+                        <span class="text-lg font-medium">Calendar</span>
+                    </a>
+                    <a href="#" onclick="showPage('page-notifications')" class="flex items-center p-3 rounded-lg hover:bg-gray-100">
+                        <i class="fa-solid fa-bell w-6 h-6 mr-4 text-gray-700 text-xl"></i>
+                        <span class="text-lg font-medium">Notifications</span>
+                    </a>
+                </nav>
+            </div>
+
+            <!-- Main Content Area -->
+            <div id="main-content" class="flex-1 flex flex-col overflow-hidden">
+                <!-- FLOATING BUTTONS (Menu and Emergency) -->
+                <div id="floating-nav-buttons" class="absolute top-4 left-4 z-10 space-y-3">
+                    <button onclick="toggleSidebar()" class="w-16 h-16 bg-white/80 backdrop-blur-sm rounded-full flex items-center justify-center shadow-lg border border-gray-200">
+                        <i class="fa-solid fa-bars w-8 h-8 text-black text-3xl"></i>
+                    </button>
+                </div>
+
+                <!-- FLOATING CLOSE BUTTON (for modal-style pages) -->
+                <div id="floating-close-button" class="absolute top-4 right-4 z-10 hidden">
+                    <button onclick="showPage('page-home')" class="w-16 h-16 bg-white/80 backdrop-blur-sm rounded-full flex items-center justify-center shadow-lg border border-gray-200">
+                        <i class="fa-solid fa-times w-8 h-8 text-black text-3xl"></i>
+                    </button>
+                </div>
+
+                <!-- Page Container (Swappable content) -->
+                <div id="page-container" class="flex-1 overflow-y-auto bg-gray-50 pt-8">
+                    
+                    <!-- PAGE: HOME -->
+                    <div id="page-home" class="app-page flex flex-col items-center justify-center h-full text-center p-8 pt-16">
+                        <div class="flex-grow flex flex-col items-center justify-center">
+                            <h2 class="text-3xl font-bold mb-16">The Home</h2>
+                            
+                            <button id="tap-to-talk-btn" onclick="toggleAgoraConversation()" class="is-listening w-48 h-48 bg-black rounded-full flex flex-col items-center justify-center text-white shadow-2xl transition-transform duration-300 ease-in-out hover:scale-105">
+                                <i class="fa-solid fa-microphone w-16 h-16 text-5xl"></i>
+                                <span class="mt-2 text-lg font-medium">Tap to Talk</span>
+                            </button>
+                            
+                            <button onclick="alert('Scan Pill feature not implemented.')" class="mt-8 w-24 h-24 bg-gray-100 rounded-full flex flex-col items-center justify-center text-black shadow-lg border border-gray-200 hover:bg-gray-200">
+                                <i class="fa-solid fa-camera w-8 h-8 text-3xl"></i>
+                                <span class="mt-1 text-sm font-medium">Scan Pill</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- PAGE: PROFILE -->
+                    <div id="page-profile" class="app-page p-6 pt-24 space-y-6">
+                        <div class="flex items-center">
+                            <div class="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center">
+                                <i class="fa-solid fa-phone w-10 h-10 text-black text-4xl"></i>
+                            </div>
+                        </div>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="text-sm font-medium text-gray-500">Username</label>
+                                <p id="profile-username" class="text-lg">gg</p>
+                            </div>
+                            <div>
+                                <label class="text-sm font-medium text-gray-500">Phone Number</label>
+                                <p id="profile-phone" class="text-lg">1234567892</p>
+                            </div>
+                            <div>
+                                <label for="family-contact" class="text-sm font-medium text-gray-500">Family Contact</label>
+                                <input type="tel" id="family-contact" placeholder="Enter family contact number" class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-black" value="9876543210">
+                            </div>
+                            <div>
+                                <label for="language" class="text-sm font-medium text-gray-500">Language</label>
+                                <select id="language" class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-black">
+                                    <option>English</option>
+                                    <option>Hindi</option>
+                                    <option>Spanish</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button class="w-full bg-black text-white font-bold py-3 px-6 rounded-full text-md shadow-lg hover:bg-gray-800 transition-colors">
+                            Edit Profile
+                        </button>
+                    </div>
+
+                    <!-- PAGE: MEDICATIONS -->
+                    <div id="page-medications" class="app-page p-6 pt-24 space-y-4">
+                        <!-- This list will be populated by JavaScript -->
+                    </div>
+
+                    <!-- PAGE: MEDICAL RECORDS -->
+                    <div id="page-records" class="app-page p-6 pt-24">
+                        <!-- Content will be rendered by JS -->
+                    </div>
+                    
+                    <!-- PAGE: CALENDAR -->
+                    <div id="page-calendar" class="app-page p-6 pt-24">
+                        <h2 class="text-3xl font-bold mb-6">Calendar</h2>
+                        <div class="bg-white p-4 rounded-lg shadow border border-gray-200 mb-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <button class="p-1 rounded-md hover:bg-gray-100"><i class="fa-solid fa-chevron-left w-5 h-5"></i></button>
+                                <h3 class="font-bold text-lg">November 2025</h3>
+                                <button class="p-1 rounded-md hover:bg-gray-100"><i class="fa-solid fa-chevron-right w-5 h-5"></i></button>
+                            </div>
+                            <div class="grid grid-cols-7 gap-1 text-center">
+                                <span class="font-medium text-sm text-gray-500">Su</span>
+                                <span class="font-medium text-sm text-gray-500">Mo</span>
+                                <span class="font-medium text-sm text-gray-500">Tu</span>
+                                <span class="font-medium text-sm text-gray-500">We</span>
+                                <span class="font-medium text-sm text-gray-500">Th</span>
+                                <span class="font-medium text-sm text-gray-500">Fr</span>
+                                <span class="font-medium text-sm text-gray-500">Sa</span>
+                                <span class="text-gray-400 p-1">26</span> <span class="text-gray-400 p-1">27</span> <span class="text-gray-400 p-1">28</span> <span class="text-gray-400 p-1">29</span> <span class="text-gray-400 p-1">30</span> <span class="text-gray-400 p-1">31</span> <span class="p-1">1</span>
+                                <span class="p-1">2</span> <span class="p-1">3</span> <span class="p-1">4</span> <span class="p-1">5</span> <span class="p-1">6</span> <span class="p-1">7</span> <span class="p-1">8</span>
+                                <span class="p-1">9</span> <span class="p-1">10</span> <span class="p-1">11</span> <span class="p-1">12</span> <span class="p-1">13</span> <span class="bg-blue-600 text-white rounded-full p-1">14</span> <span class="p-1">15</span>
+                                <span class="p-1">16</span> <span class="p-1">17</span> <span class="p-1">18</span> <span class="p-1">19</span> <span class="p-1">20</span> <span class="p-1">21</span> <span class="p-1">22</span>
+                                <span class="p-1">23</span> <span class="p-1">24</span> <span class="p-1">25</span> <span class="p-1">26</span> <span class="p-1">27</span> <span class="p-1">28</span> <span class="p-1">29</span>
+                                <span class="p-1">30</span> <span class="text-gray-400 p-1">1</span> <span class="text-gray-400 p-1">2</span> <span class="text-gray-400 p-1">3</span> <span class="text-gray-400 p-1">4</span> <span class="text-gray-400 p-1">5</span> <span class="text-gray-400 p-1">6</span>
+                            </div>
+                        </div>
+                        
+                        <h3 class="text-xl font-bold mb-2">Appointments</h3>
+                        <p class="text-gray-600 mb-4" id="appointment-date-title">Friday, November 14, 2025</p>
+                        <div id="appointments-list-today" class="text-center text-gray-500 p-6">
+                            <i class="fa-solid fa-calendar-xmark w-12 h-12 text-gray-400 mx-auto mb-4 text-5xl"></i>
+                            No appointments scheduled for this date
+                        </div>
+
+                        <h3 class="text-xl font-bold mt-8 mb-4">All Upcoming Appointments</h3>
+                        <div id="appointments-list-all" class="space-y-4">
+                            <!-- This list will be populated by JavaScript -->
+                        </div>
+                    </div>
+
+                    <!-- PAGE: NOTIFICATIONS -->
+                    <div id="page-notifications" class="app-page pt-24">
+                        <!-- Content will be rendered by JS -->
+                    </div>
+                </div>
+
+                <!-- EMERGENCY BUTTON FOR MAIN APP SCREEN -->
+                <button onclick="console.log('Emergency Call Initiated!')" class="absolute bottom-8 right-8 w-20 h-20 bg-red-600 text-white rounded-full flex items-center justify-center shadow-2xl z-20 transition-transform hover:scale-105">
+                    <i class="fa-solid fa-phone w-8 h-8 text-4xl"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- ===================================================================== -->
+        <!-- MODAL: MEDICATION DETAIL                                              -->
+        <!-- ===================================================================== -->
+        <div id="modal-medication-detail" class="fixed inset-0 z-40 bg-black/60 hidden flex items-center justify-center p-8">
+            <div class="bg-white w-full rounded-2xl shadow-2xl overflow-hidden">
+                <img id="med-detail-img" src="https://placehold.co/600x400/BFDBFE/3B82F6?text=Metformin" alt="Medication" class="w-full h-48 object-cover">
+                <div class="p-6">
+                    <h2 id="med-detail-name" class="text-2xl font-bold mb-2">Metformin</h2>
+                    <p class="text-gray-700 mb-2"><strong>Time:</strong> <span id="med-detail-time">8:00 AM</span></p>
+                    <p class="text-gray-700 mb-6"><strong>Stock:</strong> <span id="med-detail-stock">30 pills</span></p>
+                    <div class="bg-orange-200 text-orange-800 p-4 rounded-lg mb-6">
+                        <p><strong>Info:</strong> Take with food. Contact your doctor if you experience any side effects.</p>
+                    </div>
+                    <button onclick="hideModal('modal-medication-detail')" class="w-full bg-black text-white font-bold py-3 px-6 rounded-full text-md shadow-lg hover:bg-gray-800 transition-colors">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ===================================================================== -->
+        <!-- MODAL: GENERIC CLOSEABLE                                              -->
+        <!-- ===================================================================== -->
+        <div id="modal-closeable" class="fixed inset-0 z-40 bg-black/60 hidden flex items-center justify-center p-8">
+            <div class="bg-white w-full rounded-2xl shadow-2xl p-6 text-center">
+                <i class="fa-solid fa-info-circle w-16 h-16 text-black mx-auto mb-4 text-6xl"></i>
+                <h2 class="text-2xl font-bold mb-2">Placeholder</h2>
+                <p class="text-gray-600 mb-6">This is a generic modal that can be closed.</p>
+                <button onclick="hideModal('modal-closeable')" class="w-full bg-black text-white font-bold py-3 px-6 rounded-full text-md shadow-lg hover:bg-gray-800 transition-colors">
+                    Close
+                </button>
+            </div>
+        </div>
+
+
+    </div> <!-- End #app-container -->
+
+    <script>
+        // =========================================================================
+        // MOCK DATA
+        // =========================================================================
+
+        const mockUserProfile = {
+            username: "gg",
+            phone: "1234567892",
+            familyContact: "9876543210",
+            language: "English"
+        };
+
+        const mockMedications = [
+            { id: 1, name: "Metformin", time: "8:00 AM", stock: 30, image: "https://placehold.co/600x400/BFDBFE/3B82F6?text=Metformin" },
+            { id: 2, name: "Lisinopril", time: "2:00 PM", stock: 15, image: "https://placehold.co/600x400/FCA5A5/DC2626?text=Lisinopril" },
+            { id: 3, name: "Atorvastatin", time: "9:00 PM", stock: 60, image: "https://placehold.co/600x400/A7F3D0/059669?text=Atorvastatin" }
+        ];
+
+        const mockMedicalRecords = [
+            { title: "Annual Physical Examination", date: "10/15/2025", details: "Dr. Sharma • Checkup" },
+            { title: "Blood Test Results", date: "9/20/2025", details: "Dr. Patel • Lab Report" },
+            { title: "Cardiology Consultation", date: "8/10/2025", details: "Dr. Kumar • Consultation" },
+            { title: "Prescription Refill", date: "7/5/2025", details: "Dr. Sharma • Prescription" },
+            { title: "X-Ray Chest", date: "6/18/2025", details: "Dr. Reddy • Imaging" }
+        ];
+
+        const mockAppointments = [
+            { title: "Annual Physical Examination", date: "Tomorrow at 10:00 AM", doctor: "Dr. Sharma" },
+            { title: "Dentist Checkup", date: "Next Friday at 3:00 PM", doctor: "Dr. Verma" }
+        ];
+
+        const mockNotifications = [
+            { title: "Medication Reminder", body: "Time to take Metformin", time: "5 min ago", icon: "pills" },
+            { title: "Upcoming Appointment", body: "Dr. Sharma - Tomorrow at 10:00 AM", time: "2 hours ago", icon: "calendar-days" },
+            { title: "Low Stock Alert", body: "Lisinopril running low (15 pills remaining)", time: "1 day ago", icon: "exclamation-circle" },
+            { title: "Health Checkup", body: "Annual physical examination due next week", time: "2 days ago", icon: "clipboard-check" }
+        ];
+
+        // =========================================================================
+        // GLOBAL STATE
+        // =========================================================================
+
+        let currentScreen = 'screen-login';
+        let currentPage = 'page-home';
+        let isSidebarOpen = false;
+        
+        // =========================================================================
+        // AGORA CONVERSATIONAL AI STATE
+        // =========================================================================
+        
+        const AGORA_APP_ID = "3a7bfae3269d43f5b8b3a743177c83db";
+        const AGORA_CHANNEL_NAME = "convai_Xbe9B_";
+        const AGORA_TOKEN = "007eJxTYJCyLGuff2GeUdbug8pP/r+NmjO57/HmN7tjDxYst9OWtTVTYEg1MkgzNDcxSUk0AJLmSUmmZgbmKeYGKaYGRobmZsZP7cQzGwIZGYo1/FgZGSAQxOdlSM7PK0vMjHevMigPdGRgAAC4DSI/";
+        const LOCAL_USER_UID = Math.floor(Math.random() * 100000).toString();
+        const AI_AGENT_UID = "0"; 
+        const BACKEND_URL = "http://127.0.0.1:5000/api/join-agora";
+
+        let agoraClient = null;
+        let localAudioTrack = null;
+        let isConversationActive = false;
+        let agoraSessionId = null;
+
+        // =========================================================================
+        // NAVIGATION & UI FUNCTIONS (WITH ERROR HANDLING)
+        // =========================================================================
+
+        function showScreen(screenId) {
+            try {
+                document.querySelectorAll('.app-screen').forEach(screen => {
+                    screen.style.display = 'none';
+                });
+                document.getElementById(screenId).style.display = 'block';
+                currentScreen = screenId;
+                if(screenId === 'screen-login' || screenId === 'screen-location') {
+                     document.getElementById(screenId).style.display = 'flex';
+                }
+            } catch (err) {
+                console.error(`Error in showScreen('${screenId}'):`, err);
+            }
+        }
+
+        function showPage(pageId) {
+            try {
+                document.querySelectorAll('.app-page').forEach(page => {
+                    page.style.display = 'none';
+                });
+                document.getElementById(pageId).style.display = 'block';
+                currentPage = pageId;
+
+                const mainNavButtons = document.getElementById('floating-nav-buttons');
+                const closeButton = document.getElementById('floating-close-button');
+                const allPagesExceptHome = ['page-profile', 'page-medications', 'page-records', 'page-calendar', 'page-notifications'];
+                
+                if (pageId === 'page-home') {
+                    mainNavButtons.style.display = 'block';
+                    closeButton.style.display = 'none';
+                } else if (allPagesExceptHome.includes(pageId)) {
+                    mainNavButtons.style.display = 'block';
+                    closeButton.style.display = 'block';
+                }
+                
+                toggleSidebar(false); // Close sidebar on new page
+                if (pageId === 'page-home') {
+                     document.getElementById(pageId).style.display = 'flex';
+                }
+            } catch (err) {
+                console.error(`Error in showPage('${pageId}'):`, err);
+            }
+        }
+
+        function showModal(modalId) {
+            try {
+                document.getElementById(modalId).style.display = 'flex';
+            } catch (err) {
+                console.error(`Error in showModal('${modalId}'):`, err);
+            }
+        }
+
+        function hideModal(modalId) {
+             try {
+                document.getElementById(modalId).style.display = 'none';
+            } catch (err) {
+                console.error(`Error in hideModal('${modalId}'):`, err);
+            }
+        }
+
+        function toggleSidebar(forceState) {
+            try {
+                const sidebar = document.getElementById('sidebar');
+                const backdrop = document.getElementById('sidebar-backdrop');
+                const mainNavButtons = document.getElementById('floating-nav-buttons');
+                const closeButton = document.getElementById('floating-close-button');
+                isSidebarOpen = (forceState !== undefined) ? forceState : !isSidebarOpen;
+
+                const allPagesExceptHome = ['page-profile', 'page-medications', 'page-records', 'page-calendar', 'page-notifications'];
+
+                if (isSidebarOpen) {
+                    backdrop.style.display = 'block';
+                    sidebar.classList.remove('-translate-x-full');
+                    mainNavButtons.style.display = 'none';
+                    closeButton.style.display = 'none';
+                } else {
+                    backdrop.style.display = 'none';
+                    sidebar.classList.add('-translate-x-full');
+                    
+                    if (currentPage === 'page-home') {
+                        mainNavButtons.style.display = 'block';
+                        closeButton.style.display = 'none';
+                    } else if (allPagesExceptHome.includes(currentPage)) {
+                        mainNavButtons.style.display = 'block';
+                        closeButton.style.display = 'block';
+                    }
+                }
+            } catch (err) {
+                console.error("Error in toggleSidebar:", err);
+            }
+        }
+        
+        function goToMainApp() {
+            try {
+                showScreen('screen-main');
+                showPage('page-home');
+            } catch (err) {
+                console.error("Error in goToMainApp:", err);
+            }
+        }
+
+        function requestLocationPermission() {
+            try {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            console.log("Location granted:", position.coords.latitude, position.coords.longitude);
+                            goToMainApp();
+                        },
+                        (error) => {
+                            console.warn(`Geolocation error (${error.code}): ${error.message}`);
+                            goToMainApp(); // Proceed anyway
+                        }
+                    );
+                } else {
+                    console.error("Geolocation is not supported by this browser.");
+                    alert("Your browser does not support location services.");
+                    goToMainApp(); // Proceed anyway
+                }
+            } catch (err) {
+                console.error("Error in requestLocationPermission:", err);
+            }
+        }
+
+        // =========================================================================
+        // DATA RENDERING FUNCTIONS (WITH ERROR HANDLING)
+        // =========================================================================
+
+        function renderProfile() {
+            try {
+                document.getElementById('profile-username').textContent = mockUserProfile.username;
+                document.getElementById('profile-phone').textContent = mockUserProfile.phone;
+                document.getElementById('family-contact').value = mockUserProfile.familyContact;
+            } catch (err) {
+                console.error("Error in renderProfile:", err);
+            }
+        }
+
+        function renderMedications() {
+            try {
+                const container = document.getElementById('page-medications');
+                container.innerHTML = '';
+                container.innerHTML += '<h2 class="text-3xl font-bold mb-6">Medications</h2>';
+                mockMedications.forEach(med => {
+                    const medCard = `
+                        <div class="bg-white p-4 rounded-lg shadow border border-gray-200 flex items-center" onclick="showMedDetail(${med.id})">
+                            <img src="${med.image}" alt="${med.name}" class="w-16 h-16 rounded-lg object-cover mr-4">
+                            <div class="flex-grow">
+                                <h3 class="text-xl font-bold">${med.name}</h3>
+                                <p class="text-gray-600">Time: ${med.time}</p>
+                            </div>
+                            <span class="text-sm font-medium text-gray-500">${med.stock} pills left</span>
+                        </div>
+                    `;
+                    container.innerHTML += medCard;
+                });
+            } catch (err) {
+                console.error("Error in renderMedications:", err);
+            }
+        }
+        
+        function showMedDetail(medId) {
+            try {
+                const med = mockMedications.find(m => m.id === medId);
+                if (!med) return;
+                
+                document.getElementById('med-detail-img').src = med.image;
+                document.getElementById('med-detail-name').textContent = med.name;
+                document.getElementById('med-detail-time').textContent = med.time;
+                document.getElementById('med-detail-stock').textContent = `${med.stock} pills`;
+                showModal('modal-medication-detail');
+            } catch (err) {
+                console.error(`Error in showMedDetail(${medId}):`, err);
+            }
+        }
+
+        function renderRecords() {
+            try {
+                const container = document.getElementById('page-records');
+                container.innerHTML = '';
+                container.innerHTML += `
+                    <h2 class="text-3xl font-bold mb-4">Medical Records</h2>
+                    <p class="text-gray-600 mb-4">Records from ABHA ID</p>
+                    <div class="relative mb-4">
+                        <input type="search" placeholder="Search records..." class="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-black">
+                        <i class="fa-solid fa-search w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+                    </div>
+                    <div id="records-list-items" class="space-y-4"></div>
+                `;
+                
+                const listItemsContainer = document.getElementById('records-list-items');
+                mockMedicalRecords.forEach(record => {
+                    const recordItem = `
+                        <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                            <div class="flex items-start">
+                                <i class="fa-solid fa-file-lines w-5 h-5 text-gray-500 mr-3 mt-1"></i>
+                                <div class="flex-grow">
+                                    <h3 class="text-lg font-semibold">${record.title}</h3>
+                                    <div class="flex items-center text-sm text-gray-500 mt-1">
+                                        <i class="fa-solid fa-calendar-days w-4 h-4 mr-2"></i>
+                                        <span>${record.date}</span>
+                                        <span class="mx-2">•</span>
+                                        <span>${record.details}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    listItemsContainer.innerHTML += recordItem;
+                });
+            } catch (err) {
+                console.error("Error in renderRecords:", err);
+            }
+        }
+
+        function renderCalendar() {
+             try {
+                const container = document.getElementById('appointments-list-all');
+                 container.innerHTML = '';
+                 
+                 if (mockAppointments.length === 0) {
+                     container.innerHTML = '<p class="text-gray-500 text-center">No upcoming appointments.</p>';
+                     return;
+                 }
+                 
+                 mockAppointments.forEach(appt => {
+                    const apptItem = `
+                        <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex items-start">
+                            <div class="w-12 h-12 bg-gray-100 rounded-full flex-shrink-0 flex items-center justify-center mr-4">
+                                <i class="fa-solid fa-user w-6 h-6 text-black text-2xl"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-semibold">${appt.title}</h3>
+                                <p class="text-gray-600">${appt.doctor}</p>
+                                <p class="text-sm text-gray-500 mt-1">${appt.date}</p>
+                            </div>
+                        </div>
+                    `;
+                    container.innerHTML += apptItem;
+                 });
+             } catch (err) {
+                console.error("Error in renderCalendar:", err);
+             }
+        }
+
+        function renderNotifications() {
+            try {
+                const container = document.getElementById('page-notifications');
+                container.innerHTML = '';
+                container.innerHTML += `
+                    <div class="px-6 mb-6">
+                        <h2 class="text-3xl font-bold">Notifications</h2>
+                    </div>
+                `;
+                mockNotifications.forEach(notif => {
+                    const notifItem = `
+                        <div class="p-4 px-6 flex items-start hover:bg-gray-50">
+                            <i class="fa-solid fa-${notif.icon} w-6 h-6 text-gray-500 mr-4 mt-1 text-xl"></i>
+                            <div class="flex-grow">
+                                <h3 class="text-md font-semibold">${notif.title}</h3>
+                                <p class="text-gray-700">${notif.body}</p>
+                                <p class="text-sm text-gray-400 mt-1">${notif.time}</p>
+                            </div>
+                        </div>
+                    `;
+                    container.innerHTML += notifItem;
+                });
+            } catch (err) {
+                console.error("Error in renderNotifications:", err);
+            }
+        }
+
+        // =========================================================================
+        // AGORA CONVERSATIONAL AI FUNCTIONS (WITH ERROR HANDLING)
+        // =========================================================================
+
+        async function toggleAgoraConversation() {
+            // This is the top-level event handler.
+            // We wrap the whole thing in a try...catch to be safe.
+            try {
+                if (isConversationActive) {
+                    await leaveAgoraConversation();
+                } else {
+                    await joinAgoraConversation();
+                }
+            } catch (err) {
+                console.error("Error in toggleAgoraConversation:", err);
+                alert("An unexpected error occurred. Please try again.");
+                // Ensure UI is reset if anything fails
+                await leaveAgoraConversation();
+            }
+        }
+
+        async function joinAgoraConversation() {
+            const btn = document.getElementById('tap-to-talk-btn');
+            
+            try {
+                // 1. Update UI to "Connecting"
+                btn.classList.remove('bg-black', 'bg-red-600');
+                btn.classList.add('bg-yellow-500');
+                btn.innerHTML = `
+                    <i class="fa-solid fa-spinner fa-spin w-16 h-16 text-5xl"></i>
+                    <span class="mt-2 text-lg font-medium">Connecting...</span>
+                `;
+
+                // 2. Call our backend to start the Agora AI agent session
+                console.log("Calling backend to start Agora session...");
+                const backendResponse = await fetch(BACKEND_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (!backendResponse.ok) {
+                    const errorData = await backendResponse.json();
+                    throw new Error(`Backend error: ${errorData.error || backendResponse.statusText}`);
+                }
+
+                const backendData = await backendResponse.json();
+                agoraSessionId = backendData.sessionId;
+                console.log("Backend session started. Agora Session ID:", agoraSessionId);
+
+                // 3. Initialize Agora Client
+                console.log("Initializing Agora client...");
+                agoraClient = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+                
+                // 4. Join the channel
+                console.log(`Joining Agora channel: ${AGORA_CHANNEL_NAME} as user ${LOCAL_USER_UID}`);
+                await agoraClient.join(AGORA_APP_ID, AGORA_CHANNEL_NAME, AGORA_TOKEN, LOCAL_USER_UID);
+                
+                // 5. Create and publish microphone audio track
+                localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+                await agoraClient.publish(localAudioTrack);
+                console.log("Microphone audio published.");
+
+                // 6. Handle remote users (specifically, the AI agent)
+                agoraClient.on("user-published", async (user, mediaType) => {
+                    try {
+                        if (user.uid.toString() === AI_AGENT_UID && mediaType === "audio") {
+                            console.log("AI Agent is publishing audio. Subscribing...");
+                            await agoraClient.subscribe(user, mediaType);
+                            if (user.audioTrack) {
+                                user.audioTrack.play();
+                            }
+                        }
+                    } catch (err) {
+                        console.error("Error in user-published event handler:", err);
+                    }
+                });
+
+                // 7. Update UI to "Stop"
+                isConversationActive = true;
+                btn.classList.remove('bg-yellow-500');
+                btn.classList.add('bg-red-600');
+                btn.innerHTML = `
+                    <i class="fa-solid fa-stop w-12 h-12 text-4xl"></i>
+                    <span class="mt-2 text-lg font-medium">Tap to Stop</span>
+                `;
+
+            } catch (err) {
+                console.error("Error joining Agora conversation:", err);
+                alert(`Error starting conversation: ${err.message}`);
+                await leaveAgoraConversation(); // Clean up
+            }
+        }
+
+        async function leaveAgoraConversation() {
+            const btn = document.getElementById('tap-to-talk-btn');
+            isConversationActive = false;
+            
+            try {
+                if (localAudioTrack) {
+                    localAudioTrack.stop();
+                    localAudioTrack.close();
+                    localAudioTrack = null;
+                }
+                
+                if (agoraClient) {
+                    await agoraClient.leave();
+                    agoraClient = null;
+                }
+                
+                console.log("Left Agora channel.");
+
+            } catch (err) {
+                console.error("Error leaving Agora channel:", err);
+            }
+
+            // Reset button UI
+            try {
+                btn.classList.remove('bg-red-600', 'bg-yellow-500');
+                btn.classList.add('bg-black');
+                btn.innerHTML = `
+                    <i class="fa-solid fa-microphone w-16 h-16 text-5xl"></i>
+                    <span class="mt-2 text-lg font-medium">Tap to Talk</span>
+                `;
+            } catch (err) {
+                console.error("Error resetting button UI:", err);
+            }
+        }
+
+        // =========================================================================
+        // INITIALIZATION
+        // =========================================================================
+
+        window.onload = () => {
+            try {
+                // NEW: Check if Agora SDK loaded
+                if (typeof AgoraRTC === 'undefined') {
+                    console.error("Agora SDK (AgoraRTC) failed to load. Check your internet connection or script tag.");
+                    alert("Error: The Agora SDK failed to load. Please check your internet connection and refresh the page.");
+                    return; // Stop execution
+                }
+
+                // Show the first screen
+                showScreen('screen-login');
+                
+                // Render mock data into the pages
+                renderProfile();
+                renderMedications();
+                renderRecords();
+                renderCalendar();
+                renderNotifications();
+            } catch (err) {
+                console.error("Error during window.onload:", err);
+                alert("An error occurred while loading the app. Please refresh the page.");
+            }
+        };
+
+    </script>
+</body>
+</html>
