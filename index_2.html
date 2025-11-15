@@ -344,12 +344,11 @@
         // AGORA CONVERSATIONAL AI STATE
         // =========================================================================
         
-        const AGORA_APP_ID = "3a7bfae3269d43f5b8b3a743177c83db";
-        const AGORA_CHANNEL_NAME = "convai_Xbe9B_";
-        const AGORA_TOKEN = "007eJxTYJCyLGuff2GeUdbug8pP/r+NmjO57/HmN7tjDxYst9OWtTVTYEg1MkgzNDcxSUk0AJLmSUmmZgbmKeYGKaYGRobmZsZP7cQzGwIZGYo1/FgZGSAQxOdlSM7PK0vMjHevMigPdGRgAAC4DSI/";
-        const LOCAL_USER_UID = Math.floor(Math.random() * 100000).toString();
-        const AI_AGENT_UID = "0"; 
-        const BACKEND_URL = "http://127.0.0.1:5000/api/join-agora";
+        const BACKEND_BASE_URL = "http://127.0.0.1:5000";
+
+        // This is still okay, we need a unique ID for the local user.
+        const LOCAL_USER_UID = Math.floor(Math.random() * 100000); // Changed to number
+        const AI_AGENT_UID = "0";
 
         let agoraClient = null;
         let localAudioTrack = null;
@@ -665,35 +664,55 @@
                     <span class="mt-2 text-lg font-medium">Connecting...</span>
                 `;
 
-                // 2. Call our backend to start the Agora AI agent session
-                console.log("Calling backend to start Agora session...");
-                const backendResponse = await fetch(BACKEND_URL, {
+                // 2. NEW: Get a fresh token for the USER from our backend
+                console.log(`Requesting token for user UID: ${LOCAL_USER_UID}`);
+                const tokenResponse = await fetch(`${BACKEND_BASE_URL}/api/get-token`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ uid: LOCAL_USER_UID })
+                });
+
+                if (!tokenResponse.ok) {
+                    const errorData = await tokenResponse.json();
+                    throw new Error(`Backend token error: ${errorData.error || tokenResponse.statusText}`);
+                }
+                
+                const tokenData = await tokenResponse.json();
+                const { token: userToken, appId: agoraAppId, channel: agoraChannelName } = tokenData;
+                console.log("Received user token and config from backend.");
+
+
+                // 3. Call our backend to start the Agora AI agent session
+                console.log("Calling backend to start Agora AI agent...");
+                const backendResponse = await fetch(`${BACKEND_BASE_URL}/api/join-agora`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
                 });
 
                 if (!backendResponse.ok) {
                     const errorData = await backendResponse.json();
+                    // NEW: Handle 409 Conflict specifically
+                    if (backendResponse.status === 409) {
+                        alert("AI agent is already running. Please ask the admin to stop it, or try leaving and rejoining.");
+                    }
                     throw new Error(`Backend error: ${errorData.error || backendResponse.statusText}`);
                 }
 
                 const backendData = await backendResponse.json();
-                agoraSessionId = backendData.sessionId;
-                console.log("Backend session started. Agora Session ID:", agoraSessionId);
+                agoraSessionId = backendData.agent_id; // Corrected from sessionId to agent_id
+                console.log("Backend session started. Agora Agent ID:", agoraSessionId);
 
-                // 3. Initialize Agora Client
+                // 4. Initialize Agora Client
                 console.log("Initializing Agora client...");
                 agoraClient = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
                 
-                // 4. Join the channel
-                console.log(`Joining Agora channel: ${AGORA_CHANNEL_NAME} as user ${LOCAL_USER_UID}`);
-                await agoraClient.join(AGORA_APP_ID, AGORA_CHANNEL_NAME, AGORA_TOKEN, LOCAL_USER_UID);
+                // 5. Join the channel (using fresh credentials from backend)
+                console.log(`Joining Agora channel: ${agoraChannelName} as user ${LOCAL_USER_UID}`);
+                await agoraClient.join(agoraAppId, agoraChannelName, userToken, LOCAL_USER_UID);
                 
-                // 5. Create and publish microphone audio track
+                // 6. Create and publish microphone audio track
                 localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-                await agoraClient.publish(localAudioTrack);
-                console.log("Microphone audio published.");
-
+                // ...
                 // 6. Handle remote users (specifically, the AI agent)
                 agoraClient.on("user-published", async (user, mediaType) => {
                     try {
@@ -725,11 +744,28 @@
             }
         }
 
-        async function leaveAgoraConversation() {
+           async function leaveAgoraConversation() {
             const btn = document.getElementById('tap-to-talk-btn');
             isConversationActive = false;
             
             try {
+                // NEW: Tell the backend to stop the AI agent
+                if (agoraSessionId) {
+                    console.log(`Sending 'leave' request to backend for agent: ${agoraSessionId}`);
+                    // We don't need to wait for this, just fire and forget
+                    fetch(`${BACKEND_BASE_URL}/api/leave-agora`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    }).then(res => {
+                        if (res.ok) {
+                            console.log("Backend 'leave' request successful.");
+                        } else {
+                            console.warn("Backend 'leave' request failed.");
+                        }
+                    });
+                    agoraSessionId = null; // Clear it
+                }
+
                 if (localAudioTrack) {
                     localAudioTrack.stop();
                     localAudioTrack.close();
@@ -742,7 +778,6 @@
                 }
                 
                 console.log("Left Agora channel.");
-
             } catch (err) {
                 console.error("Error leaving Agora channel:", err);
             }
